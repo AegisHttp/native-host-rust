@@ -174,7 +174,7 @@ jobs:
 
       - name: Build Source Package
         run: |
-          debuild -S -sa -k"${{ secrets.LAUNCHPAD_GPG_KEY_ID }}"
+          debuild -S -sa -d -k"${{ secrets.LAUNCHPAD_GPG_KEY_ID }}"
 
       - name: Upload to Launchpad PPA
         run: |
