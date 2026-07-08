@@ -155,33 +155,35 @@ jobs:
     name: Publish to Launchpad PPA
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    env:
+      LAUNCHPAD_GPG_PRIVATE_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup GPG
-        if: secrets.LAUNCHPAD_GPG_PRIVATE_KEY != ''
+        if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: |
           echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" | gpg --batch --import
           echo "default-key ${{ secrets.LAUNCHPAD_GPG_KEY_ID }}" >> ~/.gnupg/gpg.conf
 
       - name: Install Debian Packaging Tools
-        if: secrets.LAUNCHPAD_GPG_PRIVATE_KEY != ''
+        if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y devscripts debhelper build-essential dput
 
       - name: Generate Debian Files
-        if: secrets.LAUNCHPAD_GPG_PRIVATE_KEY != ''
+        if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: ./packaging/debian-generator.sh "${{ github.ref_name }}"
 
       - name: Build Source Package
-        if: secrets.LAUNCHPAD_GPG_PRIVATE_KEY != ''
+        if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: |
           debuild -S -sa -d -k"${{ secrets.LAUNCHPAD_GPG_KEY_ID }}"
 
       - name: Upload to Launchpad PPA
-        if: secrets.LAUNCHPAD_GPG_PRIVATE_KEY != ''
+        if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: |
           dput ppa:aegis-http/ppa ../aegis-host_*.changes
 
@@ -189,24 +191,26 @@ jobs:
     name: Publish Snap to Store
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    env:
+      SNAPCRAFT_TOKEN: ${{ secrets.SNAPCRAFT_TOKEN }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Update Snap Version
-        if: secrets.SNAPCRAFT_TOKEN != ''
+        if: ${{ env.SNAPCRAFT_TOKEN != '' }}
         run: |
           RAW_VERSION="${{ github.ref_name }}"
           VERSION="${RAW_VERSION#v}"
           sed -i "s/version: '0.1.0'/version: '$VERSION'/g" snap/snapcraft.yaml
 
       - name: Build Snap
-        if: secrets.SNAPCRAFT_TOKEN != ''
+        if: ${{ env.SNAPCRAFT_TOKEN != '' }}
         uses: snapcore/action-build@v1
         id: snapcraft
 
       - name: Publish Snap
-        if: secrets.SNAPCRAFT_TOKEN != ''
+        if: ${{ env.SNAPCRAFT_TOKEN != '' }}
         uses: snapcore/action-publish@v1
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
@@ -218,12 +222,14 @@ jobs:
     name: Publish Homebrew Formula
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    env:
+      TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Get Tarball SHA256
-        if: secrets.TAP_DEPLOY_KEY != ''
+        if: ${{ env.TAP_DEPLOY_KEY != '' }}
         id: sha
         run: |
           curl -L -s https://github.com/AegisHttp/native-host-rust/archive/refs/tags/${{ github.ref_name }}.tar.gz -o source.tar.gz
@@ -232,7 +238,7 @@ jobs:
           echo "sha256=$SHA" >> $GITHUB_OUTPUT
 
       - name: Checkout Tap Repo
-        if: secrets.TAP_DEPLOY_KEY != ''
+        if: ${{ env.TAP_DEPLOY_KEY != '' }}
         uses: actions/checkout@v4
         with:
           repository: AegisHttp/homebrew-tap
@@ -240,7 +246,7 @@ jobs:
           path: homebrew-tap
 
       - name: Update Formula
-        if: secrets.TAP_DEPLOY_KEY != ''
+        if: ${{ env.TAP_DEPLOY_KEY != '' }}
         run: |
           cd homebrew-tap
           RAW_VERSION="${{ github.ref_name }}"
