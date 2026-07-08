@@ -1,0 +1,19 @@
+name: "aegis-host"
+arch: "${ARCH}"
+platform: "linux"
+version: "${VERSION:-1.0.0}"
+maintainer: "Aegis Http Team"
+description: "Aegis Http Native Host Daemon"
+depends:
+  - gnupg
+homepage: "https://github.com/AegisHttp"
+license: "AGPL-3.0"
+contents:
+  - src: ./target/aegis-host
+    dst: /usr/bin/aegis-host
+  - src: ./packaging/firefox.json
+    dst: /usr/lib/mozilla/native-messaging-hosts/com.aegis.http.gpg.json
+  - src: ./packaging/chrome.json
+    dst: /etc/opt/chrome/native-messaging-hosts/com.aegis.http.gpg.json
+  - src: ./packaging/chrome.json
+    dst: /etc/chromium/native-messaging-hosts/com.aegis.http.gpg.json

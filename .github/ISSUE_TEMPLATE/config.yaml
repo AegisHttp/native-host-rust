@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+- name: 📖 Documentation
+  url: https://aegis-http.github.io/
+  about: Check out the official documentation for guides and examples
+- name: 💬 Discussions
+  url: https://github.com/aegis-http/discussions
+  about: Ask questions and discuss ideas with the community

@@ -1,0 +1,25 @@
+{
+  "name": "aegis-host",
+  "productName": "Aegis Http Native Host",
+  "version": "0.1.0",
+  "description": "Aegis Http Native Host Daemon",
+  "identifier": "com.aegis.http.gpg",
+  "publisher": "Aegis Http",
+  "formats": [
+    "nsis"
+  ],
+  "outDir": "dist/packager",
+  "binaries": [
+    {
+      "path": "target\\release\\aegis-host.exe",
+      "main": true
+    }
+  ],
+  "icons": [
+    "assets/logo.png"
+  ],
+  "nsis": {
+    "displayLanguageSelector": false,
+    "preinstallSection": "Section \"-PreInstallChecks\"\nReadRegStr $0 HKLM \"SOFTWARE\\WOW6432Node\\GnuPG\" \"Install Directory\"\nStrCmp $0 \"\" check_64\nIfFileExists \"$0\\bin\\gpg.exe\" gpg_installed check_64\n\ncheck_64:\nReadRegStr $0 HKLM \"SOFTWARE\\GnuPG\" \"Install Directory\"\nStrCmp $0 \"\" gpg_not_installed\nIfFileExists \"$0\\bin\\gpg.exe\" gpg_installed gpg_not_installed\n\ngpg_not_installed:\n  DetailPrint \"Gpg4win is not installed. Downloading Setup (this may take a minute)...\"\n  nsExec::ExecToLog `powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri https://files.gpg4win.org/gpg4win-4.3.1.exe -OutFile '$TEMP\\gpg4win.exe'\"`\n  Pop $0\n  StrCmp $0 \"error\" download_failed\n  StrCmp $0 \"timeout\" download_failed\n  ; Usually nsExec returns exit code 0 on success\n  StrCmp $0 \"0\" download_success download_failed\n\ndownload_failed:\n  MessageBox MB_OK \"Could not download Gpg4win automatically. Please ensure you install it manually from gpg4win.org after this setup.\"\n  Goto gpg_installed\n\ndownload_success:\n  DetailPrint \"Installing Gpg4win silently...\"\n  ExecWait '\"$TEMP\\gpg4win.exe\" /S' $1\n  Delete \"$TEMP\\gpg4win.exe\"\n\ngpg_installed:\n  DetailPrint \"Gpg4win check passed. Proceeding with Aegis Http Native Host...\"\nSectionEnd\n"
+  }
+}

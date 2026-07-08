@@ -1,0 +1,9 @@
+{
+  "name": "com.aegis.http.gpg",
+  "description": "Aegis Http HTTP GPG Daemon",
+  "path": "/usr/bin/aegis-host",
+  "type": "stdio",
+  "allowed_extensions": [
+    "gpg-login@aegis.http"
+  ]
+}

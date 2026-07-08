@@ -1,0 +1,246 @@
+name: Package Ecosystem
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-native:
+    name: Build Native Host (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: aegis-http-native-host-linux-amd64
+            binary_name: aegis-host
+            nfpm_arch: amd64
+          - os: ubuntu-24.04-arm
+            artifact_name: aegis-http-native-host-linux-arm64
+            binary_name: aegis-host
+            nfpm_arch: arm64
+          - os: windows-latest
+            artifact_name: aegis-http-native-host-windows-amd64
+            binary_name: aegis-host.exe
+          - os: macos-14
+            artifact_name: aegis-http-native-host-macos-arm64
+            binary_name: aegis-host
+            
+    steps:
+      - name: Checkout Native Host
+        uses: actions/checkout@v4
+        with:
+          path: native-host-rust
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Native Host
+        run: cargo build --release
+        working-directory: native-host-rust
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+
+      - name: Setup NFPM
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          if ! command -v go &> /dev/null; then
+             echo "Go is not installed, act workaround skipping NFPM..."
+             exit 0
+          fi
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Package Native Host (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p native-host-staging/assets
+          cp target/release/${{ matrix.binary_name }} native-host-staging/
+          cp install.sh native-host-staging/
+          cp -r assets/* native-host-staging/assets/
+          cp README*.md native-host-staging/
+          cp LICENSE native-host-staging/ 2>/dev/null || true
+          cd native-host-staging
+          zip -r ../${{ matrix.artifact_name }}.zip .
+          tar -czf ../${{ matrix.artifact_name }}.tar.gz .
+
+          # If it's Linux, run NFPM
+          if [ "${{ matrix.nfpm_arch }}" != "" ]; then
+             echo "📦 Generating NFPM packages..."
+             export ARCH="${{ matrix.nfpm_arch }}"
+             # Strip 'v' from tag name, e.g., 'v0.0.1' -> '0.0.1'
+             RAW_VERSION="${{ github.ref_name }}"
+             export VERSION="${RAW_VERSION#v}"
+             
+             cd ..
+             cp target/release/${{ matrix.binary_name }} target/aegis-host
+             mkdir -p pack-out
+             nfpm pkg --config packaging/nfpm.yaml --target pack-out/ --packager deb
+             nfpm pkg --config packaging/nfpm.yaml --target pack-out/ --packager rpm
+             nfpm pkg --config packaging/nfpm.yaml --target pack-out/ --packager archlinux
+             mv pack-out/* .
+             rm target/aegis-host
+          fi
+        working-directory: native-host-rust
+
+      - name: Package Native Host (Windows Zip & Installer)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          # Create zip
+          mkdir -p native-host-staging/assets
+          cp target/release/${{ matrix.binary_name }} native-host-staging/
+          cp install.sh native-host-staging/
+          cp -r assets/* native-host-staging/assets/
+          cp README*.md native-host-staging/
+          cp LICENSE native-host-staging/ 2>/dev/null || true
+          
+          # Compress to zip
+          cd native-host-staging
+          7z a -tzip ../${{ matrix.artifact_name }}.zip *
+          cd ..
+          
+          # Install cargo-packager to generate NSIS setup
+          cargo install cargo-packager
+          
+          # Inject true version into packager.json
+          RAW_VERSION="${{ github.ref_name }}"
+          VERSION="${RAW_VERSION#v}"
+          if [ -z "$VERSION" ] || [[ "$VERSION" == *'/'* ]]; then
+              VERSION="0.1.0"
+          fi
+          jq ".version = \"$VERSION\"" packager.json > tmp.json && mv tmp.json packager.json
+          
+          cargo packager --release
+          
+          # Move setup exe to root for artifact upload
+          cp dist/packager/*.exe ./${{ matrix.artifact_name }}-installer.exe || true
+        working-directory: native-host-rust
+
+      - name: Upload Native Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            native-host-rust/${{ matrix.artifact_name }}.zip
+            native-host-rust/${{ matrix.artifact_name }}.tar.gz
+            native-host-rust/${{ matrix.artifact_name }}-installer.exe
+            native-host-rust/*.deb
+            native-host-rust/*.rpm
+            native-host-rust/*.pkg.tar.zst
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-native]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*
+          generate_release_notes: true
+
+  publish-ppa:
+    name: Publish to Launchpad PPA
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup GPG
+        run: |
+          echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "default-key ${{ secrets.LAUNCHPAD_GPG_KEY_ID }}" >> ~/.gnupg/gpg.conf
+
+      - name: Install Debian Packaging Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts debhelper build-essential dput
+
+      - name: Generate Debian Files
+        run: ./packaging/debian-generator.sh "${{ github.ref_name }}"
+
+      - name: Build Source Package
+        run: |
+          debuild -S -sa -k"${{ secrets.LAUNCHPAD_GPG_KEY_ID }}"
+
+      - name: Upload to Launchpad PPA
+        run: |
+          dput ppa:aegis-http/ppa ../aegis-host_*.changes
+
+  publish-snap:
+    name: Publish Snap to Store
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Update Snap Version
+        run: |
+          RAW_VERSION="${{ github.ref_name }}"
+          VERSION="${RAW_VERSION#v}"
+          sed -i "s/version: '0.1.0'/version: '$VERSION'/g" snap/snapcraft.yaml
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: snapcraft
+
+      - name: Publish Snap
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
+        with:
+          snap: ${{ steps.snapcraft.outputs.snap }}
+          release: stable
+
+  publish-homebrew:
+    name: Publish Homebrew Formula
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get Tarball SHA256
+        id: sha
+        run: |
+          curl -L -s https://github.com/AegisHttp/native-host-rust/archive/refs/tags/${{ github.ref_name }}.tar.gz -o source.tar.gz
+          SHA=$(sha256sum source.tar.gz | awk '{print $1}')
+          echo "SHA256 checksum: $SHA"
+          echo "sha256=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Checkout Tap Repo
+        uses: actions/checkout@v4
+        with:
+          repository: AegisHttp/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula
+        run: |
+          cd homebrew-tap
+          RAW_VERSION="${{ github.ref_name }}"
+          VERSION="${RAW_VERSION#v}"
+          
+          # Replace url and sha256 in aegis-host.rb
+          sed -i "s|url \"https://github.com/AegisHttp/native-host-rust/archive/refs/tags/.*.tar.gz\"|url \"https://github.com/AegisHttp/native-host-rust/archive/refs/tags/${{ github.ref_name }}.tar.gz\"|g" Formula/aegis-host.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${{ steps.sha.outputs.sha256 }}\"|g" Formula/aegis-host.rb
+          
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Formula/aegis-host.rb
+          git commit -m "Bump aegis-host to $VERSION" || exit 0
+          git push
