@@ -154,7 +154,7 @@ jobs:
   publish-ppa:
     name: Publish to Launchpad PPA
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && secrets.LAUNCHPAD_GPG_PRIVATE_KEY != ''
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -183,7 +183,7 @@ jobs:
   publish-snap:
     name: Publish Snap to Store
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && secrets.SNAPCRAFT_TOKEN != ''
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -209,7 +209,7 @@ jobs:
   publish-homebrew:
     name: Publish Homebrew Formula
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && secrets.TAP_GITHUB_TOKEN != ''
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
