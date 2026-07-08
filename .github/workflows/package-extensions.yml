@@ -157,6 +157,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     env:
       LAUNCHPAD_GPG_PRIVATE_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
+      LAUNCHPAD_GPG_PASSPHRASE: ${{ secrets.LAUNCHPAD_GPG_PASSPHRASE }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -164,8 +165,30 @@ jobs:
       - name: Setup GPG
         if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: |
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
           echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" | gpg --batch --import
           echo "default-key ${{ secrets.LAUNCHPAD_GPG_KEY_ID }}" >> ~/.gnupg/gpg.conf
+          gpg-connect-agent reloadagent /bye
+          
+          # Write passphrase to a file if present (debuild strips environment variables)
+          if [ -n "$LAUNCHPAD_GPG_PASSPHRASE" ]; then
+            echo -n "$LAUNCHPAD_GPG_PASSPHRASE" > /tmp/gpg-passphrase
+            chmod 600 /tmp/gpg-passphrase
+          fi
+          
+          # Create GPG wrapper script to pass passphrase if needed
+          cat <<'EOF' > /tmp/gpg-wrapper
+          #!/bin/bash
+          if [ -f /tmp/gpg-passphrase ]; then
+            exec gpg --batch --no-tty --pinentry-mode loopback --passphrase-file /tmp/gpg-passphrase "$@"
+          else
+            exec gpg --batch --no-tty --pinentry-mode loopback "$@"
+          fi
+          EOF
+          chmod +x /tmp/gpg-wrapper
 
       - name: Install Debian Packaging Tools
         if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
@@ -180,7 +203,7 @@ jobs:
       - name: Build Source Package
         if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}
         run: |
-          debuild -S -sa -d -k"${{ secrets.LAUNCHPAD_GPG_KEY_ID }}"
+          debuild -S -sa -d -k"${{ secrets.LAUNCHPAD_GPG_KEY_ID }}" -p/tmp/gpg-wrapper
 
       - name: Upload to Launchpad PPA
         if: ${{ env.LAUNCHPAD_GPG_PRIVATE_KEY != '' }}

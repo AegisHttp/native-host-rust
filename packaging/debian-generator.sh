@@ -2,8 +2,9 @@
 set -e
 
 VERSION="$1"
+DISTRIBUTION="${2:-"noble"}"
 if [ -z "$VERSION" ]; then
-    echo "Usage: $0 <version>"
+    echo "Usage: $0 <version> [distribution]"
     exit 1
 fi
 
@@ -54,7 +55,7 @@ chmod +x debian/rules
 # Write debian/changelog
 DATE=$(date -R)
 cat <<EOF > debian/changelog
-aegis-host ($VERSION) unstable; urgency=medium
+aegis-host ($VERSION) $DISTRIBUTION; urgency=medium
 
   * Release version $VERSION.
 

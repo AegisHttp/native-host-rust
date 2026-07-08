@@ -14,3 +14,4 @@ dist/
 Thumbs.db
 bin/
 fix.sh
+.act-payload.json
