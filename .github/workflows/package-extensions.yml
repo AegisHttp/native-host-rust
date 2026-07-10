@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_snap:
+        description: 'Publish Snap to Store'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build-native:
@@ -113,6 +119,9 @@ jobs:
           fi
           jq ".version = \"$VERSION\"" packager.json > tmp.json && mv tmp.json packager.json
           
+          mkdir -p dist/packager/target/release
+          cp target/release/aegis-host.exe dist/packager/target/release/
+          
           cargo packager --release
           
           # Move setup exe to root for artifact upload
@@ -213,7 +222,7 @@ jobs:
   publish-snap:
     name: Publish Snap to Store
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_snap == 'true' }}
     env:
       SNAPCRAFT_TOKEN: ${{ secrets.SNAPCRAFT_TOKEN }}
     steps:
