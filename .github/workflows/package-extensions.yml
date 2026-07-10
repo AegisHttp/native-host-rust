@@ -235,6 +235,7 @@ jobs:
       - name: Publish Snap
         if: ${{ env.SNAPCRAFT_TOKEN != '' }}
         uses: snapcore/action-publish@v1
+        continue-on-error: true
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
         with:
