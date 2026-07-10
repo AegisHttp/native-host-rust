@@ -9,6 +9,7 @@
     "nsis"
   ],
   "outDir": "dist/packager",
+  "binariesDir": ".",
   "binaries": [
     {
       "path": "target\\release\\aegis-host.exe",
