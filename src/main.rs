@@ -567,7 +567,105 @@ fn install_native_host() {
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn install_native_host() {
-    println!("The self-installer logic is currently only implemented for Windows and macOS.");
+    let host_name = "com.aegis.http.gpg";
+    
+    // Determine the executable path to place in the manifest JSON
+    let is_snap = env::var("SNAP").is_ok();
+    let exe_path_str = if is_snap {
+        "/snap/bin/aegis-host".to_string()
+    } else {
+        env::current_exe()
+            .expect("Failed to get current executable path")
+            .to_string_lossy()
+            .to_string()
+    };
+
+    let ext_id = option_env!("CHROME_EXTENSION_ID").unwrap_or("lappbcambkogfmigiphapgjcglafcfnd");
+    let manifest_content = format!(
+        r#"{{
+  "name": "{}",
+  "description": "Aegis Http Native Host Daemon",
+  "path": "{}",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://{}/"
+  ]
+}}"#,
+        host_name, exe_path_str, ext_id
+    );
+
+    let firefox_manifest_content = format!(
+        r#"{{
+  "name": "{}",
+  "description": "Aegis Http Native Host Daemon",
+  "path": "{}",
+  "type": "stdio",
+  "allowed_extensions": [
+    "gpg-login@aegis.http"
+  ]
+}}"#,
+        host_name, exe_path_str
+    );
+
+    // Get the correct home directory
+    let home_dir = if is_snap {
+        env::var("SNAP_REAL_HOME").or_else(|_| env::var("HOME")).expect("Failed to get home directory")
+    } else {
+        env::var("HOME").expect("Failed to get HOME environment variable")
+    };
+
+    // Define all target paths where manifests should be written
+    let targets = vec![
+        (
+            format!("{}/.mozilla/native-messaging-hosts/{}.json", home_dir, host_name),
+            &firefox_manifest_content,
+        ),
+        (
+            format!("{}/.config/google-chrome/NativeMessagingHosts/{}.json", home_dir, host_name),
+            &manifest_content,
+        ),
+        (
+            format!("{}/.config/chromium/NativeMessagingHosts/{}.json", home_dir, host_name),
+            &manifest_content,
+        ),
+        (
+            format!("{}/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts/{}.json", home_dir, host_name),
+            &manifest_content,
+        ),
+        (
+            format!("{}/.config/microsoft-edge/NativeMessagingHosts/{}.json", home_dir, host_name),
+            &manifest_content,
+        ),
+        (
+            format!("{}/.config/vivaldi/NativeMessagingHosts/{}.json", home_dir, host_name),
+            &manifest_content,
+        ),
+        (
+            format!("{}/.config/opera/NativeMessagingHosts/{}.json", home_dir, host_name),
+            &manifest_content,
+        ),
+    ];
+
+    for (target_path, content) in targets {
+        let path = std::path::Path::new(&target_path);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match File::create(path) {
+            Ok(mut file) => {
+                if file.write_all(content.as_bytes()).is_ok() {
+                    println!("Registered host at: {}", target_path);
+                } else {
+                    eprintln!("Failed to write to manifest at {}", target_path);
+                }
+            }
+            Err(e) => {
+                eprintln!("Could not register host at {}: {}", target_path, e);
+            }
+        }
+    }
+
+    println!("✅ Aegis Http Native Host registration completed.");
 }
 
 fn main() {

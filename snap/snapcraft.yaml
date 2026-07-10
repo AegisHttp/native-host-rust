@@ -2,17 +2,73 @@ name: aegis-host
 base: core22
 version: '0.1.0'
 summary: Aegis Http HTTP GPG Daemon
+title: Aegis Http HTTP GPG Daemon
+license: AGPL-3.0-only
+icon: snap/gui/icon.png
+website: https://aegishttp.github.io
+source-code: https://github.com/AegisHttp
+contact: mailto:me@canus.dev
+donation: https://github.com/AegisHttp
+issues: https://github.com/AegisHttp/AegisHttp/issues
+
+architectures:
+  - build-on: [amd64]
+    build-for: [amd64]
+  - build-on: [arm64]
+    build-for: [arm64]
+  - build-on: [armhf]
+    build-for: [armhf]
+
+# Optional: Configure custom APT repositories/PPAs if needed for build dependencies
+# package-repositories:
+#   - type: apt
+#     ppa: snappy-dev/snapcraft-daily
 description: |
-  Aegis Http Native Messaging host to bridge browser extension and GPG.
+  Aegis Host is the native messaging daemon for the Aegis HTTP ecosystem. It acts as a secure, local bridge between your web browsers (Chrome, Firefox, Edge, Brave, Vivaldi, etc.) and your system's GnuPG keyring.
+
+  Key Features:
+
+  * Secure Challenge Signing: Authenticate dynamically using GnuPG private keys directly in your browser.
+
+  * Stateless Encryption: Encrypt payloads using public keys on the fly without cluttering your permanent local keyring.
+
+  * GUI Pinentry Support: Interacts seamlessly with your native OS Pinentry dialog (like Pinentry-GTK, Pinentry-Qt, or Pinentry-Mac) for secure passphrase entry.
+
+  * Lightweight & Fast: Written in Rust for maximum memory safety, security, and near-zero overhead.
 
 grade: stable
-confinement: classic
+confinement: strict
 
 parts:
   aegis-host:
     plugin: rust
     source: .
+    stage-packages:
+      - gnupg
 
 apps:
   aegis-host:
     command: bin/aegis-host
+    environment:
+      GNUPGHOME: $SNAP_REAL_HOME/.gnupg
+    plugs:
+      - home
+      - gpg-keys
+      - browser-native-messaging
+      - x11
+      - wayland
+      - desktop
+      - desktop-legacy
+      - gsettings
+
+plugs:
+  browser-native-messaging:
+    interface: personal-files
+    write:
+      - $HOME/.mozilla/native-messaging-hosts/com.aegis.http.gpg.json
+      - $HOME/.config/google-chrome/NativeMessagingHosts/com.aegis.http.gpg.json
+      - $HOME/.config/chromium/NativeMessagingHosts/com.aegis.http.gpg.json
+      - $HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts/com.aegis.http.gpg.json
+      - $HOME/.config/microsoft-edge/NativeMessagingHosts/com.aegis.http.gpg.json
+      - $HOME/.config/vivaldi/NativeMessagingHosts/com.aegis.http.gpg.json
+      - $HOME/.config/opera/NativeMessagingHosts/com.aegis.http.gpg.json
