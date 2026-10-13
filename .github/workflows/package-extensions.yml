@@ -43,6 +43,10 @@ jobs:
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Unit Tests
+        run: cargo test --bin aegis-host
+        working-directory: native-host-rust
+
       - name: Build Native Host
         run: cargo build --release
         working-directory: native-host-rust
@@ -108,8 +112,8 @@ jobs:
           7z a -tzip ../${{ matrix.artifact_name }}.zip *
           cd ..
           
-          # Install cargo-packager to generate NSIS setup
-          cargo install cargo-packager
+          # Install cargo-packager to generate NSIS setup (pinned; verified locally with 0.11.8)
+          cargo install cargo-packager --version 0.11.8 --locked
           
           # Inject true version into packager.json
           RAW_VERSION="${{ github.ref_name }}"

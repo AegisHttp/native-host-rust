@@ -6,6 +6,26 @@ use std::fs::File;
 use std::io::{self, IsTerminal, Read, Write};
 use std::process::Command;
 
+/// Gecko id of the Firefox extension (AegisHttp/firefox-extension manifest.json).
+const FIREFOX_EXTENSION_ID: &str = "gpg-login@aegis.http";
+
+/// Firefox native messaging manifest; `exe_path_json` must already be escaped for JSON.
+#[allow(dead_code)] // not every platform writes a Firefox manifest through this function
+fn firefox_manifest(host_name: &str, exe_path_json: &str) -> String {
+    format!(
+        r#"{{
+  "name": "{}",
+  "description": "Aegis Http Native Host Daemon",
+  "path": "{}",
+  "type": "stdio",
+  "allowed_extensions": [
+    "{}"
+  ]
+}}"#,
+        host_name, exe_path_json, FIREFOX_EXTENSION_ID
+    )
+}
+
 #[cfg(target_os = "windows")]
 use winreg::enums::*;
 #[cfg(target_os = "windows")]
@@ -456,18 +476,7 @@ fn install_native_host() {
         .expect("Failed to write to Edge registry");
 
     // Register for Firefox (Firefox requires allowed_extensions instead of origins, so we just register the base manifest although it's originally chrome.json. We will write a specific Firefox manifest)
-    let firefox_manifest_content = format!(
-        r#"{{
-  "name": "{}",
-  "description": "Aegis Http Native Host Daemon",
-  "path": "{}",
-  "type": "stdio",
-  "allowed_extensions": [
-    "aegis-http@aegishttp.com"
-  ]
-}}"#,
-        host_name, exe_path_str
-    );
+    let firefox_manifest_content = firefox_manifest(host_name, &exe_path_str);
 
     let firefox_manifest_path = exe_path.with_file_name(format!("{}-firefox.json", host_name));
     let mut firefox_manifest_file =
@@ -510,18 +519,7 @@ fn install_native_host() {
         host_name, exe_path_str, ext_id
     );
 
-    let firefox_manifest_content = format!(
-        r#"{{
-  "name": "{}",
-  "description": "Aegis Http Native Host Daemon",
-  "path": "{}",
-  "type": "stdio",
-  "allowed_extensions": [
-    "aegis-http@aegishttp.com"
-  ]
-}}"#,
-        host_name, exe_path_str
-    );
+    let firefox_manifest_content = firefox_manifest(host_name, &exe_path_str);
 
     let home_dir = env::var("HOME").expect("Failed to get HOME environment variable");
 
@@ -594,18 +592,7 @@ fn install_native_host() {
         host_name, exe_path_str, ext_id
     );
 
-    let firefox_manifest_content = format!(
-        r#"{{
-  "name": "{}",
-  "description": "Aegis Http Native Host Daemon",
-  "path": "{}",
-  "type": "stdio",
-  "allowed_extensions": [
-    "gpg-login@aegis.http"
-  ]
-}}"#,
-        host_name, exe_path_str
-    );
+    let firefox_manifest_content = firefox_manifest(host_name, &exe_path_str);
 
     // Get the correct home directory
     let home_dir = if is_snap {
@@ -825,5 +812,28 @@ fn main() {
         } else {
             break; // EOF or err
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The gecko id of the Firefox extension (AegisHttp/firefox-extension manifest.json). Windows and
+    // macOS used "aegis-http@aegishttp.com", so Firefox refused the native host there.
+    #[test]
+    fn firefox_manifest_allows_the_published_extension_id() {
+        // Callers pass the path already escaped for JSON (Windows doubles the backslashes).
+        let m: Value = serde_json::from_str(&firefox_manifest("com.aegis.http.gpg", r"C:\\Aegis\\aegis-host.exe")).unwrap();
+        assert_eq!(m["allowed_extensions"], serde_json::json!(["gpg-login@aegis.http"]));
+        assert_eq!(m["name"], "com.aegis.http.gpg");
+        assert_eq!(m["path"], r"C:\Aegis\aegis-host.exe");
+        assert_eq!(m["type"], "stdio");
+    }
+
+    #[test]
+    fn firefox_extension_id_matches_the_packaged_manifest() {
+        let packaged: Value = serde_json::from_str(include_str!("../packaging/firefox.json")).unwrap();
+        assert_eq!(packaged["allowed_extensions"], serde_json::json!([FIREFOX_EXTENSION_ID]));
     }
 }
