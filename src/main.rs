@@ -6,6 +6,23 @@ use std::fs::File;
 use std::io::{self, IsTerminal, Read, Write};
 use std::process::Command;
 
+/// Chrome Web Store id of the Aegis Http extension.
+const DEFAULT_CHROME_EXTENSION_ID: &str = "lappbcambkogfmigiphapgjcglafcfnd";
+
+/// The build-time CHROME_EXTENSION_ID if set and non-empty, else the Web Store id. CI passes the
+/// variable from a secret; an unset secret arrives as an empty string.
+fn chrome_extension_id_from(build_value: Option<&'static str>) -> &'static str {
+    match build_value {
+        Some(id) if !id.trim().is_empty() => id.trim(),
+        _ => DEFAULT_CHROME_EXTENSION_ID,
+    }
+}
+
+#[allow(dead_code)] // used by the platform-specific installers
+fn chrome_extension_id() -> &'static str {
+    chrome_extension_id_from(option_env!("CHROME_EXTENSION_ID"))
+}
+
 /// Gecko id of the Firefox extension (AegisHttp/firefox-extension manifest.json).
 const FIREFOX_EXTENSION_ID: &str = "gpg-login@aegis.http";
 
@@ -424,7 +441,7 @@ fn install_native_host() {
     let exe_path = env::current_exe().expect("Failed to get current executable path");
     let exe_path_str = exe_path.to_string_lossy().replace("\\", "\\\\");
 
-    let ext_id = option_env!("CHROME_EXTENSION_ID").unwrap_or("lappbcambkogfmigiphapgjcglafcfnd");
+    let ext_id = chrome_extension_id();
     // Generate manifest.json content
     let manifest_content = format!(
         r#"{{
@@ -505,7 +522,7 @@ fn install_native_host() {
     let exe_path = env::current_exe().expect("Failed to get current executable path");
     let exe_path_str = exe_path.to_string_lossy().to_string();
 
-    let ext_id = option_env!("CHROME_EXTENSION_ID").unwrap_or("lappbcambkogfmigiphapgjcglafcfnd");
+    let ext_id = chrome_extension_id();
     let manifest_content = format!(
         r#"{{
   "name": "{}",
@@ -578,7 +595,7 @@ fn install_native_host() {
             .to_string()
     };
 
-    let ext_id = option_env!("CHROME_EXTENSION_ID").unwrap_or("lappbcambkogfmigiphapgjcglafcfnd");
+    let ext_id = chrome_extension_id();
     let manifest_content = format!(
         r#"{{
   "name": "{}",
@@ -829,6 +846,17 @@ mod tests {
         assert_eq!(m["name"], "com.aegis.http.gpg");
         assert_eq!(m["path"], r"C:\Aegis\aegis-host.exe");
         assert_eq!(m["type"], "stdio");
+    }
+
+    // v0.1.0 regression: CI passes CHROME_EXTENSION_ID from an unset secret, i.e. an empty string,
+    // which produced "chrome-extension:///" and Chrome reported "native messaging host not found".
+    #[test]
+    fn empty_chrome_extension_id_falls_back_to_the_web_store_id() {
+        assert_eq!(chrome_extension_id_from(Some("")), "lappbcambkogfmigiphapgjcglafcfnd");
+        assert_eq!(chrome_extension_id_from(Some("  ")), "lappbcambkogfmigiphapgjcglafcfnd");
+        assert_eq!(chrome_extension_id_from(None), "lappbcambkogfmigiphapgjcglafcfnd");
+        assert_eq!(chrome_extension_id_from(Some("abcdefghijklmnopabcdefghijklmnop")), "abcdefghijklmnopabcdefghijklmnop");
+        assert!(!chrome_extension_id().is_empty());
     }
 
     #[test]

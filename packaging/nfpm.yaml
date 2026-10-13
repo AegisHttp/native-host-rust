@@ -1,7 +1,7 @@
 name: "aegis-host"
 arch: "${ARCH}"
 platform: "linux"
-version: "${VERSION:-1.0.0}"
+version: "${VERSION}" # set by CI from the tag; os.ExpandEnv has no ":-default" syntax
 maintainer: "Aegis Http Team"
 description: "Aegis Http Native Host Daemon"
 depends:
